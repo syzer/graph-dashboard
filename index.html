@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Graph dashboard</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <style>
+    :root {
+      --bg: #08173f;
+      --panel: rgba(7, 16, 43, 0.7);
+      --panel-border: rgba(130, 194, 255, 0.45);
+      --text: #eaf2ff;
+      --subtle: #b8d8ff;
+      --ok: #8ec5ff;
+      --warn: #ffc148;
+      --threat: #ff4256;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+    }
+
+    #scene {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(circle at 10% 20%, rgba(122, 181, 255, 0.12), transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(68, 124, 227, 0.1), transparent 45%),
+        var(--bg);
+    }
+
+    #vanta-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #sensor-field {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .label {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 4;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(129, 188, 255, 0.35);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+
+    .status-panel {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 5;
+      min-width: 250px;
+      color: var(--text);
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      backdrop-filter: blur(4px);
+    }
+
+    .status-title {
+      margin-bottom: 5px;
+      color: var(--subtle);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .status-line {
+      white-space: pre-line;
+    }
+    .alert-banner {
+      position: absolute;
+      top: 26px;
+      left: 50%;
+      z-index: 5;
+      min-width: 320px;
+      padding: 16px 28px;
+      border-radius: 22px;
+      border: 1px solid rgba(128, 195, 255, 0.28);
+      background: linear-gradient(180deg, rgba(21, 49, 99, 0.52), rgba(7, 15, 38, 0.8));
+      backdrop-filter: blur(18px);
+      box-shadow: 0 24px 44px rgba(0, 8, 24, 0.34);
+      color: #dff4ff;
+      text-align: center;
+      transform: translateX(-50%) translateY(-10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease, border-color 180ms ease;
+    }
+
+    .alert-banner.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .alert-banner.warning {
+      border-color: rgba(255, 204, 112, 0.44);
+      color: #fff0c3;
+    }
+
+    .alert-banner.threat {
+      border-color: rgba(255, 97, 126, 0.48);
+      color: #ffd8e0;
+    }
+
+    .alert-kicker {
+      font-size: 11px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      opacity: 0.72;
+    }
+
+    .alert-title {
+      margin-top: 6px;
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .help-button {
+      position: absolute;
+      left: 16px;
+      bottom: 16px;
+      z-index: 5;
+      padding: 12px 16px;
+      border: 1px solid rgba(130, 194, 255, 0.3);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(21, 49, 99, 0.56), rgba(7, 15, 38, 0.82));
+      backdrop-filter: blur(14px);
+      box-shadow: 0 18px 30px rgba(0, 8, 24, 0.28);
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .help-modal {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      opacity: 1;
+      pointer-events: none;
+      transition: opacity 160ms ease;
+    }
+
+    .help-modal.open {
+      pointer-events: auto;
+    }
+
+    .help-card {
+      position: absolute;
+      bottom: 22px;
+      display: flex;
+      flex-direction: column;
+      border-radius: 24px;
+      border: 1px solid rgba(130, 194, 255, 0.24);
+      background: linear-gradient(180deg, rgba(20, 49, 96, 0.76), rgba(7, 15, 38, 0.92));
+      box-shadow: 0 32px 60px rgba(0, 8, 24, 0.42);
+      color: var(--text);
+      opacity: 0;
+      transform: translateY(18px) scale(0.98);
+      transition: opacity 180ms ease, transform 180ms ease;
+      pointer-events: none;
+    }
+
+    .help-modal.open .help-card {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .help-info-card {
+      left: 22px;
+      right: 22px;
+      width: min(760px, calc(100vw - 44px));
+      margin: 0 auto;
+      min-height: 450px;
+      padding: 22px;
+    }
+
+    .help-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .help-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .help-close {
+      width: 40px;
+      height: 40px;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(168, 221, 255, 0.14);
+      color: var(--text);
+      font: inherit;
+      font-size: 22px;
+      cursor: pointer;
+    }
+
+    .help-body {
+      display: block;
+      flex: 1;
+    }
+
+    .help-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: rgba(234, 242, 255, 0.94);
+    }
+
+    .help-tabs {
+      display: inline-flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 6px;
+      border-radius: 14px;
+      background: rgba(122, 181, 255, 0.08);
+      border: 1px solid rgba(130, 194, 255, 0.12);
+    }
+
+    .help-tab {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      background: transparent;
+      color: rgba(234, 242, 255, 0.78);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .help-tab.active {
+      background: rgba(130, 194, 255, 0.18);
+      color: var(--text);
+    }
+
+    .help-tab-hint {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(122, 181, 255, 0.16);
+      color: rgba(234, 242, 255, 0.9);
+      font-size: 11px;
+      line-height: 1;
+    }
+
+    .help-tooltip {
+      position: absolute;
+      left: 50%;
+      top: calc(100% + 8px);
+      transform: translateX(-50%) translateY(-4px);
+      min-width: 220px;
+      max-width: 280px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(130, 194, 255, 0.3);
+      background: linear-gradient(180deg, rgba(18, 46, 92, 0.96), rgba(7, 16, 39, 0.96));
+      color: #eaf2ff;
+      font-size: 12px;
+      line-height: 1.35;
+      text-align: left;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 120ms ease, transform 120ms ease;
+      z-index: 8;
+    }
+
+    .help-tab:hover .help-tooltip,
+    .help-tab:focus-visible .help-tooltip {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .help-pane {
+      display: none;
+    }
+
+    .help-pane.active {
+      display: block;
+    }
+
+    .help-step {
+      position: relative;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(122, 181, 255, 0.08);
+      border: 1px solid rgba(130, 194, 255, 0.12);
+      cursor: help;
+    }
+
+    .help-step::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 10px);
+      transform: translateX(-50%) translateY(4px);
+      min-width: 220px;
+      max-width: 300px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(130, 194, 255, 0.3);
+      background: linear-gradient(180deg, rgba(18, 46, 92, 0.96), rgba(7, 16, 39, 0.96));
+      color: #eaf2ff;
+      font-size: 12px;
+      line-height: 1.35;
+      text-align: left;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 120ms ease, transform 120ms ease;
+      z-index: 9;
+    }
+
+    .help-step:hover::after,
+    .help-step:focus-visible::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 860px) {
+      .alert-banner {
+        top: 18px;
+        min-width: 0;
+        width: calc(100vw - 44px);
+        padding: 14px 18px;
+      }
+
+      .alert-title {
+        font-size: 24px;
+      }
+
+      .help-info-card {
+        left: 16px;
+        right: 16px;
+        width: auto;
+        min-height: 0;
+      }
+
+      .help-info-card {
+        bottom: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="scene">
+    <div id="vanta-bg"></div>
+    <canvas id="sensor-field"></canvas>
+    <canvas id="overlay"></canvas>
+    <div class="label">Graph dashboard</div>
+    <div id="alert-banner" class="alert-banner">
+      <div class="alert-kicker">Airspace Status</div>
+      <div id="alert-title" class="alert-title">Monitoring</div>
+    </div>
+    <div class="status-panel">
+      <div class="status-title">Network Status</div>
+      <div id="counts-text" class="status-line">Sensors in No Flight Zone: 0 | Total Sensors: 0</div>
+      <div id="status-text" class="status-line">Click to show drone entering the no flight zone.</div>
+    </div>
+    <button id="help-button" class="help-button" type="button">How It Works</button>
+    <div id="help-modal" class="help-modal">
+      <div class="help-card help-info-card">
+        <div class="help-header">
+          <div class="help-title">How It Works</div>
+          <button id="help-close" class="help-close" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="help-body">
+          <div class="help-tabs">
+            <button id="help-tab-now" class="help-tab active" type="button">
+              <span>How It Works Now</span>
+              <span class="help-tab-hint"><i class="fa-solid fa-question"></i></span>
+              <span class="help-tooltip">The current neural net is small enough for a XIAO ESP32-S3 Sense. Quantized int8 weights are roughly 25 KB, so the bigger challenge is audio capture, FFT or mel preprocessing, buffering, and keeping latency low.</span>
+            </button>
+            <button id="help-tab-future" class="help-tab" type="button">
+              <span>How It Will Work</span>
+              <span class="help-tab-hint"><i class="fa-solid fa-question"></i></span>
+              <span class="help-tooltip">The future deployment still fits on edge hardware, but scales better with quantized inference, PSRAM, and efficient spectrogram inputs like 40x64 or 64x64. The model is manageable; the real engineering risk is latency, preprocessing, and dataset generalization in the field.</span>
+            </button>
+          </div>
+          <div class="help-copy">
+            <div id="help-pane-now" class="help-pane active">
+              <div class="help-step" data-tip="The current prototype uses a small connected mesh, and the embedded device runs custom Rust firmware with the neural-net inference path integrated on-device.">Mesh of devices</div>
+              <div class="help-step" data-tip="Right now the system is tuned for close-range proof-of-concept drone pickup, around 18.5 meters under the tested conditions.">18.5 m drone detection</div>
+              <div class="help-step" data-tip="Nodes are placed relatively close together to keep overlap high and make early experiments more reliable.">50+ m spacing of sensors</div>
+              <div class="help-step" data-tip="The current battery figure reflects emergency operating time for the prototype hardware rather than long autonomous field deployment.">30 min emergency battery power</div>
+              <div class="help-step" data-tip="Three nearby nodes are enough to compare signals and maintain a live estimate of the drone position in the current setup.">3 nodes real-time tracking</div>
+              <div class="help-step" data-tip="The current unit price reflects low-volume prototype builds, where PCB, parts, and assembly are still relatively expensive.">Current price is $13 each</div>
+            </div>
+            <div id="help-pane-future" class="help-pane">
+              <div class="help-step" data-tip="The target network is a larger encrypted mesh that can reroute around node failures and keep operating even when part of the field drops offline.">Self healing encrypted mesh.</div>
+              <div class="help-step" data-tip="Longer-range localization combines acoustic sensing and Doppler-based frequency shift analysis to estimate movement direction before the drone is close.">300+ m audio localization with Doppler shift</div>
+              <div class="help-step" data-tip="With stronger ranging and localization, the future design can cover much more area per node and reduce deployment density.">500+ m sensor spacing</div>
+              <div class="help-step" data-tip="Power management is expected to improve dramatically by keeping nodes in aggressive sleep cycles until acoustic triggers wake them for active sensing.">2+ month battery power, with more possible using aggressive sleep / wake cycles</div>
+              <div class="help-step" data-tip="At production scale, the same minimal sensor board should become much cheaper because PCB fabrication and assembly costs fall sharply at volume.">$4-$6 each at 1000+ units for the full minimal board with PCB and assembly</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js"></script>
+  <script>
+    const scene = document.getElementById("scene");
+    const vantaHost = document.getElementById("vanta-bg");
+    const sensorFieldCanvas = document.getElementById("sensor-field");
+    const sensorFieldCtx = sensorFieldCanvas.getContext("2d");
+    const canvas = document.getElementById("overlay");
+    const ctx = canvas.getContext("2d");
+    const countsText = document.getElementById("counts-text");
+    const statusText = document.getElementById("status-text");
+    const alertBanner = document.getElementById("alert-banner");
+    const alertTitle = document.getElementById("alert-title");
+    const helpButton = document.getElementById("help-button");
+    const helpModal = document.getElementById("help-modal");
+    const helpClose = document.getElementById("help-close");
+    const helpCards = helpModal.querySelectorAll(".help-card");
+    const helpTabNow = document.getElementById("help-tab-now");
+    const helpTabFuture = document.getElementById("help-tab-future");
+    const helpPaneNow = document.getElementById("help-pane-now");
+    const helpPaneFuture = document.getElementById("help-pane-future");
+    const helpSteps = document.querySelectorAll(".help-step");
+    const vantaNodeCount = 13;
+
+    let vantaEffect = null;
+    let freezeTimer = 0;
+    let helpTimer = 0;
+
+    const cfg = {
+      terrainGap: 58,
+      terrainStroke: "rgba(140, 190, 255, 0.12)",
+      zoneStroke: "rgba(124, 194, 255, 0.52)",
+      zoneFill: "rgba(64, 140, 255, 0.08)",
+      zoneWarn: "rgba(255, 193, 72, 0.16)",
+      zoneThreat: "rgba(255, 66, 86, 0.18)",
+      droneColor: "#ff3d4d",
+      traceColor: "rgba(255, 74, 90, 0.75)",
+      droneSpeed: 0.16,
+      zonePulseSpeed: 0
+    };
+
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
+    let rafId = 0;
+    let lastTs = 0;
+    let incidentActive = false;
+    let incidentStartTs = 0;
+    let zoneState = "CLEAR";
+    let zone = { x: 0, y: 0, rx: 0, ry: 0 };
+    let warningNodes = [];
+
+    const drone = {
+      active: false,
+      locked: false,
+      t: 0,
+      pos: { x: 0, y: 0 },
+      trajectory: [],
+      trace: [],
+      entered: false
+    };
+
+    function createVantaEffect() {
+      return VANTA.NET({
+        el: "#vanta-bg",
+        backgroundAlpha: 0,
+        backgroundColor: 0x08173f,
+        color: 0x4ea7ff,
+        points: vantaNodeCount,
+        maxDistance: 21,
+        spacing: 17,
+        showDots: true,
+        mouseControls: false,
+        touchControls: false,
+        gyroControls: false,
+        speed: 0,
+        minHeight: 200,
+        minWidth: 200,
+        scale: 1,
+        scaleMobile: 1
+      });
+    }
+
+    function freezeVantaField() {
+      const liveCanvas = vantaHost.querySelector("canvas");
+      if (!liveCanvas || !vantaEffect || !vantaEffect.renderer || !vantaEffect.scene || !vantaEffect.camera) {
+        return;
+      }
+
+      vantaEffect.renderer.render(vantaEffect.scene, vantaEffect.camera);
+      sensorFieldCtx.clearRect(0, 0, width, height);
+      sensorFieldCtx.drawImage(liveCanvas, 0, 0, width, height);
+
+      if (vantaEffect.req) {
+        cancelAnimationFrame(vantaEffect.req);
+        vantaEffect.req = 0;
+      }
+      vantaEffect.animationLoop = () => {};
+    }
+
+    function resize() {
+      dpr = window.devicePixelRatio || 1;
+      width = scene.clientWidth;
+      height = scene.clientHeight;
+      sensorFieldCanvas.width = Math.max(1, Math.floor(width * dpr));
+      sensorFieldCanvas.height = Math.max(1, Math.floor(height * dpr));
+      sensorFieldCanvas.style.width = `${width}px`;
+      sensorFieldCanvas.style.height = `${height}px`;
+      canvas.width = Math.max(1, Math.floor(width * dpr));
+      canvas.height = Math.max(1, Math.floor(height * dpr));
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      sensorFieldCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      zone = {
+        x: width * 0.52,
+        y: height * 0.52,
+        rx: width * 0.22,
+        ry: height * 0.2
+      };
+      if (!incidentActive && !drone.active) {
+        updateStatusPanel();
+      }
+      if (freezeTimer) {
+        clearTimeout(freezeTimer);
+      }
+      if (vantaEffect && typeof vantaEffect.destroy === "function") {
+        vantaEffect.destroy();
+      }
+      vantaHost.innerHTML = "";
+      vantaEffect = createVantaEffect();
+      freezeTimer = window.setTimeout(() => {
+        freezeVantaField();
+        drawFrame();
+      }, 180);
+      drawFrame();
+    }
+
+    function updateStatusPanel() {
+      const lines = [];
+      if (!incidentActive && !drone.active && !drone.locked) {
+        lines.push("Overall: MONITORING");
+      } else if (drone.locked && zoneState === "THREAT") {
+        lines.push("Overall: THREAT TRIANGULATED");
+      } else if (zoneState === "THREAT") {
+        lines.push("Overall: THREAT INSIDE NO FLIGHT ZONE");
+      } else if (zoneState === "WARNING") {
+        lines.push("Overall: INBOUND CONTACT");
+      } else {
+        lines.push("Overall: TRACKING");
+      }
+      lines.push(`No Flight Zone: ${zoneState}`);
+      lines.push(drone.active ? "Drone: INGRESS ACTIVE" : (drone.locked ? "Drone: TRACK LOCKED" : "Drone: STANDBY"));
+      lines.push(`Nearest Node Alerts: ${warningNodes.length}`);
+      const projectedNodes = projectVantaNodes();
+      const zoneNodeCount = projectedNodes.filter((node) => isInsideZone(node)).length;
+      countsText.textContent = `Sensors in No Flight Zone: ${zoneNodeCount} | Total Sensors: ${projectedNodes.length}`;
+      if (drone.entered) lines.push("Event: Drone entered monitored area");
+      if (drone.locked && warningNodes.length >= 3) lines.push("Triangulation: ACTIVE");
+      statusText.textContent = lines.join("\n");
+      updateAlertBanner();
+    }
+
+    function updateAlertBanner() {
+      alertBanner.classList.remove("show", "warning", "threat");
+
+      if (zoneState === "WARNING") {
+        alertTitle.textContent = "Warning";
+        alertBanner.classList.add("show", "warning");
+        return;
+      }
+
+      if (zoneState === "THREAT") {
+        alertTitle.textContent = "Threat Detected";
+        alertBanner.classList.add("show", "threat");
+        return;
+      }
+
+      alertTitle.textContent = "Monitoring";
+    }
+
+    function openHelpModal() {
+      helpModal.classList.add("open");
+    }
+
+    function closeHelpModal() {
+      helpModal.classList.remove("open");
+    }
+
+    function showHelpState(mode) {
+      const showNow = mode === "now";
+      helpTabNow.classList.toggle("active", showNow);
+      helpTabFuture.classList.toggle("active", !showNow);
+      helpPaneNow.classList.toggle("active", showNow);
+      helpPaneFuture.classList.toggle("active", !showNow);
+    }
+
+    function initStepTooltips() {
+      helpSteps.forEach((step) => {
+        const label = step.textContent.trim();
+        if (!step.dataset.tip) {
+          step.dataset.tip = `Placeholder: extra details for ${label}`;
+        }
+        step.setAttribute("tabindex", "0");
+      });
+    }
+
+    function drawTerrain() {
+      ctx.save();
+      ctx.strokeStyle = cfg.terrainStroke;
+      ctx.lineWidth = 1;
+
+      for (let y = 20; y < height + cfg.terrainGap; y += cfg.terrainGap) {
+        ctx.beginPath();
+        for (let x = -40; x <= width + 40; x += 28) {
+          const wave = Math.sin((x + y) * 0.012) * 8 + Math.cos((x - y) * 0.01) * 6;
+          const py = y + wave;
+          if (x === -40) ctx.moveTo(x, py);
+          else ctx.lineTo(x, py);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawSensorSpace() {
+      ctx.save();
+      const pulse = 1 + Math.sin(Date.now() * cfg.zonePulseSpeed) * 0.025;
+      let fill = cfg.zoneFill;
+      let stroke = cfg.zoneStroke;
+      if (zoneState === "WARNING") {
+        fill = cfg.zoneWarn;
+        stroke = "rgba(255, 193, 72, 0.8)";
+      } else if (zoneState === "THREAT") {
+        fill = cfg.zoneThreat;
+        stroke = "rgba(255, 66, 86, 0.9)";
+      }
+
+      ctx.translate(zone.x, zone.y);
+      ctx.scale(pulse, pulse);
+      ctx.fillStyle = fill;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, zone.rx, zone.ry, -0.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = stroke;
+      ctx.font = "13px Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("No Flight Zone", 0, -zone.ry - 18);
+      ctx.restore();
+    }
+
+    function projectVantaNodes() {
+      if (!vantaEffect || !Array.isArray(vantaEffect.points) || !vantaEffect.camera) {
+        return [];
+      }
+
+      const projected = [];
+      for (let i = 0; i < vantaEffect.points.length; i += 1) {
+        const point = vantaEffect.points[i];
+        if (!point || !point.position || !point.visible) continue;
+
+        const vector = point.position.clone().project(vantaEffect.camera);
+        if (vector.z < -1 || vector.z > 1) continue;
+
+        projected.push({
+          id: i,
+          x: (vector.x * 0.5 + 0.5) * width,
+          y: (-vector.y * 0.5 + 0.5) * height
+        });
+      }
+      return projected;
+    }
+
+    function getNearestWarningNodes(target, count) {
+      return projectVantaNodes()
+        .map((node) => {
+          const dx = node.x - target.x;
+          const dy = node.y - target.y;
+          return {
+            ...node,
+            distance: Math.sqrt(dx * dx + dy * dy)
+          };
+        })
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, count);
+    }
+
+    function drawWarningNodes() {
+      if (!warningNodes.length) return;
+
+      ctx.save();
+      const isThreat = zoneState === "THREAT";
+      for (let i = 0; i < warningNodes.length; i += 1) {
+        const node = warningNodes[i];
+        ctx.strokeStyle = isThreat ? "rgba(255, 66, 86, 0.95)" : "rgba(255, 193, 72, 0.95)";
+        ctx.fillStyle = isThreat ? "rgba(255, 66, 86, 0.22)" : "rgba(255, 193, 72, 0.22)";
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 18, 0, Math.PI * 2);
+        ctx.strokeStyle = isThreat ? "rgba(255, 66, 86, 0.5)" : "rgba(255, 193, 72, 0.5)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawTriangulation() {
+      if (!drone.locked || zoneState !== "THREAT" || warningNodes.length === 0) return;
+
+      const anchors = warningNodes;
+
+      ctx.save();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255, 66, 86, 0.82)";
+      ctx.setLineDash([6, 6]);
+
+      for (let i = 0; i < anchors.length; i += 1) {
+        const node = anchors[i];
+        ctx.beginPath();
+        ctx.moveTo(node.x, node.y);
+        ctx.lineTo(drone.pos.x, drone.pos.y);
+        ctx.stroke();
+      }
+
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255, 138, 150, 0.55)";
+      if (anchors.length >= 3) {
+        ctx.beginPath();
+        ctx.moveTo(anchors[0].x, anchors[0].y);
+        for (let i = 1; i < anchors.length; i += 1) {
+          ctx.lineTo(anchors[i].x, anchors[i].y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function samplePath(points, t) {
+      if (points.length === 0) return { x: 0, y: 0 };
+      if (points.length === 1) return points[0];
+
+      const segCount = points.length - 1;
+      const scaled = Math.max(0, Math.min(0.9999, t)) * segCount;
+      const idx = Math.floor(scaled);
+      const localT = scaled - idx;
+
+      const p0 = points[Math.max(0, idx - 1)];
+      const p1 = points[idx];
+      const p2 = points[Math.min(points.length - 1, idx + 1)];
+      const p3 = points[Math.min(points.length - 1, idx + 2)];
+
+      const tt = localT * localT;
+      const ttt = tt * localT;
+
+      return {
+        x: 0.5 * (
+          (2 * p1.x) +
+          (-p0.x + p2.x) * localT +
+          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * tt +
+          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * ttt
+        ),
+        y: 0.5 * (
+          (2 * p1.y) +
+          (-p0.y + p2.y) * localT +
+          (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * tt +
+          (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * ttt
+        )
+      };
+    }
+
+    function drawDroneTrace() {
+      if (drone.trace.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = cfg.traceColor;
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      for (let i = 0; i < drone.trace.length; i += 1) {
+        const p = drone.trace[i];
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawDrone() {
+      if (!drone.active && !drone.locked) return;
+      const p = drone.pos;
+      const pulse = 1 + Math.sin(Date.now() * 0.015) * 0.08;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.scale(pulse, pulse);
+
+      // Bigger icon.
+      ctx.fillStyle = cfg.droneColor;
+      ctx.beginPath();
+      ctx.moveTo(0, -16);
+      ctx.lineTo(12, 10);
+      ctx.lineTo(-12, 10);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255, 188, 196, 0.95)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function clearOverlay() {
+      ctx.clearRect(0, 0, width, height);
+    }
+
+    function drawFrame() {
+      clearOverlay();
+      drawTerrain();
+      drawSensorSpace();
+      drawWarningNodes();
+      drawDroneTrace();
+      drawTriangulation();
+      drawDrone();
+    }
+
+    function resetSimulation() {
+      incidentActive = false;
+      zoneState = "CLEAR";
+      drone.active = false;
+      drone.locked = false;
+      drone.t = 0;
+      drone.entered = false;
+      drone.trace = [];
+      warningNodes = [];
+      if (helpTimer) {
+        clearTimeout(helpTimer);
+        helpTimer = 0;
+      }
+      closeHelpModal();
+      showHelpState("now");
+      updateStatusPanel();
+      drawFrame();
+    }
+
+    function launchDrone() {
+      drone.active = true;
+      drone.locked = false;
+      drone.t = 0;
+      drone.entered = false;
+      drone.trace = [];
+
+      // A brief course correction keeps the path readable without breaking
+      // proximity-based node warning highlights.
+      drone.trajectory = [
+        { x: width * 0.8, y: -36 },
+        { x: width * 0.73, y: height * 0.14 },
+        { x: width * 0.62, y: height * 0.28 },
+        { x: width * 0.69, y: height * 0.4 },
+        { x: width * 0.58, y: height * 0.48 },
+        { x: width * 0.51, y: height * 0.55 }
+      ];
+
+      drone.pos = { ...drone.trajectory[0] };
+      startLoop();
+      updateStatusPanel();
+    }
+
+    function updateIncident(now) {
+      if (!incidentActive) return;
+      const elapsed = now - incidentStartTs;
+
+      if (elapsed >= 350 && !drone.active) {
+        launchDrone();
+      }
+    }
+
+    function isInsideZone(point) {
+      const dx = (point.x - zone.x) / zone.rx;
+      const dy = (point.y - zone.y) / zone.ry;
+      return dx * dx + dy * dy <= 1;
+    }
+
+    function updateDrone(dt) {
+      if (!drone.active) return;
+      drone.t = Math.min(1, drone.t + dt * cfg.droneSpeed);
+      drone.pos = samplePath(drone.trajectory, drone.t);
+      drone.trace.push({ x: drone.pos.x, y: drone.pos.y });
+      if (drone.trace.length > 180) drone.trace.shift();
+
+      const inside = isInsideZone(drone.pos);
+      const nextZoneState = inside ? "THREAT" : "WARNING";
+      warningNodes = getNearestWarningNodes(drone.pos, 5);
+      if (zoneState !== nextZoneState) {
+        zoneState = nextZoneState;
+        updateStatusPanel();
+      }
+      if (inside && !drone.entered) {
+        drone.entered = true;
+        updateStatusPanel();
+      }
+
+      if (drone.t >= 1) {
+        drone.active = false;
+        incidentActive = false;
+        drone.locked = true;
+        zoneState = "THREAT";
+        updateStatusPanel();
+        if (helpTimer) clearTimeout(helpTimer);
+        helpTimer = window.setTimeout(() => {
+          openHelpModal();
+          helpTimer = 0;
+        }, 650);
+      }
+    }
+
+    function tick(ts) {
+      const dtMs = lastTs ? ts - lastTs : 16;
+      lastTs = ts;
+      const dt = Math.max(0.001, Math.min(0.05, dtMs / 1000));
+
+      updateIncident(ts);
+      updateDrone(dt);
+      drawFrame();
+
+      if (incidentActive || drone.active) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        rafId = 0;
+        lastTs = 0;
+        updateStatusPanel();
+      }
+    }
+
+    function startLoop() {
+      if (rafId) return;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    scene.addEventListener("click", () => {
+      resetSimulation();
+      incidentActive = true;
+      incidentStartTs = performance.now();
+      startLoop();
+    });
+    helpButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openHelpModal();
+    });
+    helpClose.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeHelpModal();
+    });
+    helpTabNow.addEventListener("click", (event) => {
+      event.stopPropagation();
+      showHelpState("now");
+    });
+    helpTabFuture.addEventListener("click", (event) => {
+      event.stopPropagation();
+      showHelpState("future");
+    });
+    helpCards.forEach((card) => {
+      card.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+    });
+    helpModal.addEventListener("click", (event) => {
+      if (event.target === helpModal) {
+        closeHelpModal();
+      }
+    });
+
+    window.addEventListener("resize", resize);
+    window.addEventListener("beforeunload", () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      if (freezeTimer) clearTimeout(freezeTimer);
+      if (helpTimer) clearTimeout(helpTimer);
+      if (vantaEffect && typeof vantaEffect.destroy === "function") {
+        vantaEffect.destroy();
+      }
+    });
+
+    resize();
+    showHelpState("now");
+    initStepTooltips();
+  </script>
+</body>
+</html>
